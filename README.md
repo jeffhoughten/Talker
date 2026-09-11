@@ -84,13 +84,17 @@ modules/<name>/           one folder per puzzle module
 ## Building
 
 Needs the Pico SDK **1.3.0 or newer** — the modules run as I2C slaves, which
-requires `pico_i2c_slave`.
+requires `pico_i2c_slave`. Built and verified against **SDK 2.3.1** with
+**Arm GNU Toolchain 14.2.Rel1**.
 
 ```bash
 cmake -S . -B build -G Ninja
 cmake --build build
 ```
 
-Each target produces a `.uf2`. Hold BOOTSEL while plugging in a Pico and drag
-the matching file onto the `RPI-RP2` drive. Full instructions in
-[SETUP.md](SETUP.md).
+Produces 11 `.uf2` images, one per Pico. Hold BOOTSEL while plugging in a Pico
+and drag the matching file onto the `RPI-RP2` drive.
+
+Toolchain setup — including the two things that reliably trip people up on
+Windows (no native ARM64 toolchain, and picotool wanting a host compiler) — is
+in [SETUP.md](SETUP.md).

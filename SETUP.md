@@ -2,60 +2,100 @@
 
 ## 1. Install Prerequisites (Windows)
 
-### ARM toolchain
-Download and install the **GNU Arm Embedded Toolchain** from:
-https://developer.arm.com/downloads/-/gnu-rm
-(Choose the Windows installer, e.g. `gcc-arm-none-eabi-10.3-...-win32.exe`)
+Everything below installs into `%USERPROFILE%\pico\`, so none of it needs
+administrator rights.
 
-Add to PATH: `C:\Program Files (x86)\GNU Arm Embedded Toolchain\10 2021.10\bin`
-
-### CMake
-Download from https://cmake.org/download/ — choose the Windows installer.
-Make sure "Add CMake to PATH" is checked during install.
-
-### Make / Ninja
-Install either:
-- **Ninja** (recommended): `winget install Ninja-build.Ninja`
-- **make** via Git for Windows or MSYS2
+### CMake and Ninja
+```
+winget install Kitware.CMake
+winget install Ninja-build.Ninja
+```
 
 ### Git
 `winget install Git.Git` if not already installed.
+
+### ARM toolchain
+Not available through winget — download and unzip it manually:
+
+```
+https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu/14.2.rel1/binrel/arm-gnu-toolchain-14.2.rel1-mingw-w64-i686-arm-none-eabi.zip
+```
+
+The zip has no top-level folder — it unpacks `bin/`, `lib/`, `arm-none-eabi/`
+and friends directly into wherever you extract it. Give it its own directory:
+
+```
+%USERPROFILE%\pico\arm-gnu-toolchain-14.2\bin\arm-none-eabi-gcc.exe
+```
+
+> **On Windows on Arm (ARM64):** use this same i686 package. Arm publishes no
+> native Windows-on-Arm build of the bare-metal toolchain, so the compiler runs
+> under Windows' x86 emulation. It works; it is just slower. This is exactly
+> what Raspberry Pi's own VS Code extension does on ARM64 hosts. CMake and
+> Ninja do have native ARM64 builds and winget picks those automatically.
+
+### picotool
+
+The SDK uses `picotool` to turn an ELF into a `.uf2`. If it cannot find one it
+tries to **build it from source**, and picotool is a *host* program — so that
+needs a native Windows C/C++ compiler (MSVC or clang). If you have the ARM
+cross-compiler but no host compiler, the build dies partway through with
+`No CMAKE_C_COMPILER could be found`, pointing at picotool rather than at
+anything in this project.
+
+Sidestep it with the prebuilt binary — pick the release matching your SDK:
+
+```
+https://github.com/raspberrypi/pico-sdk-tools/releases
+  -> picotool-<sdk-version>-x64-win.zip     (1.7 MB)
+```
+
+Unzip to `%USERPROFILE%\pico\picotool-<version>\`, then point CMake at the
+inner folder containing `picotoolConfig.cmake` via the `picotool_DIR` variable
+(see below). The x64 build runs fine under emulation on ARM64.
 
 ---
 
 ## 2. Clone the Pico SDK
 
 ```
-git clone https://github.com/raspberrypi/pico-sdk.git C:\pico-sdk
-cd C:\pico-sdk
+git clone https://github.com/raspberrypi/pico-sdk.git %USERPROFILE%\pico\pico-sdk
+cd %USERPROFILE%\pico\pico-sdk
 git submodule update --init
-```
-
-Set the environment variable (do this permanently in System Properties → Environment Variables):
-```
-PICO_SDK_PATH=C:\pico-sdk
 ```
 
 **SDK 1.3.0 or newer is required.** The modules run as I2C slaves, which needs
 the `pico_i2c_slave` library (`pico/i2c_slave.h`). It does not exist in 1.2.x.
-Check with:
-```
-git -C C:\pico-sdk describe --tags
-```
+Use the current 2.x release unless you have a reason not to — this project is
+known good on **2.3.1**.
 
 ---
 
 ## 3. Build the Project
 
-Open a new terminal (so PICO_SDK_PATH is visible), then:
+Three things have to be visible to the build: `PICO_SDK_PATH`, `picotool_DIR`,
+and the toolchain on `PATH`. Set them permanently in System Properties →
+Environment Variables, or per-session in PowerShell:
 
+```powershell
+$env:PICO_SDK_PATH = "$env:USERPROFILE\pico\pico-sdk"
+$env:picotool_DIR  = "$env:USERPROFILE\pico\picotool-2.3.1\picotool"
+$env:PATH          = "$env:USERPROFILE\pico\arm-gnu-toolchain-14.2\bin;$env:PATH"
 ```
-cd "C:\Users\Jeff Houghten\Documents\Talker"
-mkdir build
-cd build
-cmake .. -G "Ninja"
-ninja
+
+Then configure and build:
+
+```powershell
+cmake -S . -B build -G Ninja
+cmake --build build
 ```
+
+A clean build is about 1080 steps and produces 11 `.uf2` images — one per Pico.
+
+> If you are reconfiguring after moving the project or the SDK, **delete
+> `build/` first**. CMake caches absolute paths, and a stale cache fails with
+> errors that point at directories which no longer exist rather than at the
+> real problem.
 
 Each firmware target produces a `.uf2` file in its subfolder, e.g.:
 ```
