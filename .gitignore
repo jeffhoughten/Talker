@@ -1,0 +1,28 @@
+# CMake / Ninja build output
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Firmware artifacts
+*.uf2
+*.elf
+*.elf.map
+*.bin
+*.hex
+*.dis
+
+# Claude Code local permissions (machine-specific, not shared)
+.claude/settings.local.json
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
