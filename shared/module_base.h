@@ -10,7 +10,7 @@
 // RESERVED BY THE INTER-PICO BUS (see bus_protocol.h — do not reuse):
 //   GP2  I2C1 SDA   bus data
 //   GP3  I2C1 SCL   bus clock
-//   GP6  ATTN       shared open-drain "I have news" line
+//   GP1  ATTN       shared open-drain "I have news" line
 // ---------------------------------------------------------------------------
 
 // Status RGB LED (common cathode; drive pin HIGH = LED on)

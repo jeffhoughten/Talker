@@ -10,14 +10,14 @@
                         ├─────────────────────────────────┤
                         │                                 │
                         ┤ GP0   1 ●             ● 40  VBUS ──── USB 5V in
-                        ┤ GP1   2 ●             ● 39  VSYS ──── Battery / diode-OR
+  BUS ATTN     ─────────┤ GP1   2 ●             ● 39  VSYS ──── Battery / diode-OR
                     ────┤        3  GND          ● 38  GND  ─┐
   BUS SDA (i2c1) ───────┤ GP2   4 ●             ● 37  3V3_EN │
   BUS SCL (i2c1) ───────┤ GP3   5 ●             ● 36  3V3  ──┤── 3.3 V rail (to TCA, OLEDs)
   I2C0 SDA     ─────────┤ GP4   6 ●             ● 35  AREF   │
   I2C0 SCL     ─────────┤ GP5   7 ●             ● 34  GP28   │
                     ────┤        8  GND          ● 33  GND  ──┘
-  BUS ATTN     ─────────┤ GP6   9 ●             ● 32  GP27
+                        ┤ GP6   9 ●             ● 32  GP27
                         ┤ GP7  10 ●             ● 31  GP26
                         ┤ GP8  11 ●             ● 30  RUN
                         ┤ GP9  12 ●             ● 29  GP22
@@ -33,14 +33,19 @@
                         └─────────────────────────────────┘
 ```
 
-**GP0, GP1, GP8 and GP9 are now free.** They were the daisy-chain UARTs before
-the switch to I2C; nothing uses them.
+**GP0, GP6, GP8 and GP9 are free.** GP0, GP8 and GP9 were daisy-chain UART pins
+before the switch to I2C. GP1, the other UART0 pin, is now the ATTN line.
+
+**The four bus signals are on pins 2–5** — ATTN (GP1), GND (pin 3), SDA (GP2),
+SCL (GP3) — one unbroken run of pads, so a 4-conductor cable solders on without
+crossing wires. They are at the USB end of the board; route the cable away from
+the connector so USB stays reachable for reflashing.
 
 **Two I2C buses, and they must not be confused.**
 
 | Bus  | Pins      | Role                                           | Pull-ups |
 |------|-----------|------------------------------------------------|----------|
-| i2c1 | GP2 / GP3 | Inter-Pico game bus — master to 10 modules     | 4k7 here |
+| i2c1 | GP2 / GP3 | Inter-Pico game bus — master to 10 modules     | 3.3k on the bus board |
 | i2c0 | GP4 / GP5 | This board's own displays via TCA9548A         | on the breakouts |
 
 Never hang a display off GP2/GP3. Display addresses (0x3C, 0x70, 0x71) do not
@@ -150,50 +155,60 @@ SK9822 is SPI-based (clock + data).
 
 ---
 
-## Inter-Pico Bus Connection (to all modules)
+## Inter-Pico Bus Connection (to the bus board)
 
-The central controller is the I2C **master**. Every module is a slave at
-`0x10 + module_id`, and all of them tap the same four wires in parallel.
-There is no ordering — any module can be unplugged without affecting the rest.
+The central controller is the I2C **master**, and it connects to the bus board
+exactly like every other Pico: one 4-wire cable of 30 cm or less to **header J1**.
+Every module is a slave at `0x10 + module_id`. The bus board is a perfboard spine
+in the middle cavity with one 4-pin header per module, so there are no splices
+and no ordering; any module can be unplugged without affecting the rest.
+Construction details are in [`../HARDWARE_BUILD.md`](../HARDWARE_BUILD.md).
+
+| Central pin | Signal | Bus-board header pin |
+|-------------|--------|----------------------|
+| 2 (GP1)     | ATTN   | 1                    |
+| 3 (GND)     | GND    | 2                    |
+| 4 (GP2)     | SDA    | 3                    |
+| 5 (GP3)     | SCL    | 4                    |
 
 ```
-                         3V3
-                          │
-              ┌───────────┼───────────┐
-            [4k7]       [4k7]       [4k7]     ← ONLY here, at the central
-              │           │           │
-  Central GP2 ┴─ SDA ─────┼───────────┼──────┬──────┬──────┬─── … to all 10
-  Central GP3 ────────────┴─ SCL ─────┼──────┼──────┼──────┼─── … to all 10
-  Central GP6 ──────────────────────── ATTN ─┴──────┴──────┴─── … to all 10
-  Central GND ──────────────────────── GND ──────────────────── … to all 10
+ 3V3 (power board) ──┬───────┬───────┐
+                   [3.3k]  [3.3k]  [10k]      ← ONLY here, on the bus board
+                     │       │       │
+ J1 Central ── SDA ──┴───────┼───────┼───── … to J2–J11 (the ten modules)
+               SCL ──────────┴───────┼───── …
+               ATTN ─────────────────┴───── …
+               GND ═══ short heavy wire to the GND strip (the star) ═══ …
 ```
 
-| Module          | ID   | Address |
-|-----------------|------|---------|
-| Wires           | 0x01 | 0x11    |
-| Keypad          | 0x02 | 0x12    |
-| Simon Says      | 0x03 | 0x13    |
-| Who's on First  | 0x04 | 0x14    |
-| Memory          | 0x05 | 0x15    |
-| Switches        | 0x06 | 0x16    |
-| Maze            | 0x07 | 0x17    |
-| Password        | 0x08 | 0x18    |
-| Venting Gas     | 0x09 | 0x19    |
-| Knob            | 0x0A | 0x1A    |
+| Module          | ID   | Address | Header |
+|-----------------|------|---------|--------|
+| Central         | 0x00 | master  | J1     |
+| Wires           | 0x01 | 0x11    | J2     |
+| Keypad          | 0x02 | 0x12    | J3     |
+| Simon Says      | 0x03 | 0x13    | J4     |
+| Who's on First  | 0x04 | 0x14    | J5     |
+| Memory          | 0x05 | 0x15    | J6     |
+| Switches        | 0x06 | 0x16    | J7     |
+| Maze            | 0x07 | 0x17    | J8     |
+| Password        | 0x08 | 0x18    | J9     |
+| Venting Gas     | 0x09 | 0x19    | J10    |
+| Knob            | 0x0A | 0x1A    | J11    |
 
-**Exactly one set of pull-ups, on this board.** Three 4.7 kΩ resistors from
-SDA, SCL and ATTN to 3V3. Do not populate the pull-up footprints on the module
-breakouts — ten in parallel drops the effective pull-up to 470 Ω and the bus
-stops pulling low cleanly.
+**Exactly one set of pull-ups, on the bus board:** 3.3 kΩ on SDA and SCL, 10 kΩ
+on ATTN. Do not populate the pull-up footprints on module breakouts. Ten in
+parallel drops the effective pull-up to a fraction of one and the bus stops
+pulling low cleanly. The values are a starting point to verify on a scope
+(HARDWARE_BUILD.md §2.4).
 
 **ATTN** is how a module gets the central's attention, since an I2C slave
 cannot start a transfer. It is open-drain: a module with a queued message
-switches GP6 to an output driving low, and back to a high-Z input when its
+switches GP1 to an output driving low, and back to a high-Z input when its
 outbox empties. No module ever drives it high, so any number can assert at
 once. See `SETUP.md` for the full explanation.
 
-**Common ground is mandatory**, as it was for the UART chain. The bus is
-single-ended and referenced to it.
+**Common ground is mandatory.** The bus is single-ended and referenced to it.
+The bus board's GND ties to the power board's GND strip with a short heavy wire.
 
 ---
 
@@ -291,7 +306,9 @@ is a very gentle ratio that keeps the converter cool.
 | Part | Spec | Example / Notes |
 |------|------|-----------------|
 | 2S Li-ion pack | 7.4 V, 6 000 mAh | Two 18650 cells in series in a holder, or a purpose-built 2S pack |
-| Balance charger / BMS | 2S, ≥ 2 A charge | TP5100 module handles 2S charging; BMS board protects cells |
+| Charger | 2S, ≥ 2 A charge | TP5100 module: a charger only, as far as I know (verify its datasheet) |
+| BMS / protection board | 2S, ≥ 5 A, short-circuit cutoff | Separate board; provides balancing and over-discharge / short-circuit protection |
+| Fuse | 3–5 A, inline | In the pack positive, before the master switch |
 | Buck converter | 7–12 V in → 5 V out, ≥ 3 A | LM2596 (3 A) or XL4016 (8 A) module; set output to 5.00 V before connecting |
 | AMS1117-3.3 LDO | 5 V in → 3.3 V out, 1 A | One module shared across all logic; TO-220 with small heatsink |
 | Master switch | DPDT slide, ≥ 3 A | Breaks both B+ and 5V rail simultaneously |
@@ -305,8 +322,8 @@ is a very gentle ratio that keeps the converter cool.
   USB-C ──────────────────────────────────────────────────┐
                                                           ▼
                                                   ┌──────────────┐
-                                                  │  TP5100 /    │  2S balance charger
-                                                  │  BMS module  │  + cell protection
+                                                  │  TP5100      │  2S charger only
+                                                  │  + 2S BMS    │  (BMS is a separate board)
                                                   └──────┬───────┘
                                                     B+   │   B−
                                               ┌──────────┴────────┐
@@ -314,6 +331,8 @@ is a very gentle ratio that keeps the converter cool.
                                               │  6 000 mAh        │  (2× 3 000 mAh cells)
                                               └──────────┬────────┘
                                                          │ 7.4V
+                                                  [ 3–5 A FUSE ]  in the pack positive
+                                                         │
                                                   ┌──────┴──────┐
                                                   │   MASTER    │  DPDT slide switch
                                                   │   SWITCH    │  rated ≥ 3 A
@@ -346,59 +365,80 @@ is a very gentle ratio that keeps the converter cool.
 
 ---
 
-### 5V Power Distribution Bus
+### Power Distribution Board
 
-With 11 Picos all drawing from the same 5V rail, use a short bus bar or a
-piece of perfboard as a distribution point — not a daisy-chained wire, which
-adds resistance and causes the last Pico to see lower voltage than the first.
+The power board is the **star**. It is three jumpered, dual-row barrier strips
+(5V, 3V3, GND) in the middle cavity, and every Pico gets its own 3-wire drop
+straight from it. This replaces the earlier idea of a long backbone with a tap
+per module: there are no taps and no daisy-chained wire. The column map, parts
+list and wiring practice are in [`../HARDWARE_BUILD.md`](../HARDWARE_BUILD.md) §4.
 
 ```
-                     5V RAIL (from buck converter)
-                            │
-         ┌──────────────────┼──────────────────────────── ... ──────────────┐
-         │         │        │        │        │                             │
-        ▶│        ▶│       ▶│       ▶│       ▶│                            ▶│
-      Pico 1    Pico 2   Pico 3   Pico 4   Pico 5    ...               Pico 11
-     (Central) (Wires) (Keypad) (Simon)  (Who's)                       (Knob)
-      VSYS      VSYS    VSYS     VSYS     VSYS                          VSYS
-
-  ▶ = 1N5817 Schottky diode per Pico
+  7.4 V junction ─► buck ─► 5V ───┐        column:  1      2-3      4 … 13     14
+  (pack, fuse, switch)  LDO ─► 3V3 ┤                source  Central  10 modules  bus-board
+                                   ▼                                            feed
+          ┌──────────────────────────────────────────────┐
+          │  5V   strip  ○  ○  ○  ○  ○  ○  ○  ○  ○  ○  ○ │
+          │  3V3  strip  ○  ○  ○  ○  ○  ○  ○  ○  ○  ○  ○ │
+          │  GND  strip  ○  ○  ○  ○  ○  ○  ○  ○  ○  ○  ○ │  ◄ the star point
+          └───────────────────────────┬──────────────────┘
+                 one 3-wire drop (5V, 3V3, GND) per Pico, 24 AWG
 ```
+
+The same column is the same module on all three rails. Keep the 7.4 V side
+(pack, fuse, switch, buck input) on a separate small junction well away from
+these strips, so a slip cannot put 7.4 V on the 5 V rail.
+
+At each Pico:
+
+```
+  5V rail ──▶|── VSYS (pin 39)        ▶| = 1N5817, anode to the rail, band to the Pico
+  3V3 rail ───── peripherals' VCC      never to the Pico's own 3V3(OUT) pin
+  GND strip ──── a Pico GND pin
+```
+
+Fit about 470 µF across each rail on the source column, plus about 100 µF near
+any LED strip.
 
 ---
 
 ### Ground Plan
 
-Single star ground — **one heavy wire or copper bus** running the length of the
-enclosure. All module GND wires home back to this point.
-High-current LED strip returns connect **directly to the star**, never routed
-through a Pico GND pin.
+A single star ground: **the GND strip on the power board is the one point** where
+everything returns. These land on it directly:
 
-```
-  ══════════════════════════════════════════════════════════════  GND BUS (14 AWG or copper strip)
-  ║
-  ╠══ Buck converter GND (output)
-  ╠══ BMS / battery B−
-  ╠══ AMS1117-3.3 GND
-  ║
-  ╠══ Pico 1 GND (multiple pins bonded together)
-  ╠══ Pico 2 GND  ...
-  ╠══ Pico 3 GND  ...           ← logic returns (low current)
-  ╠══  ... × 11 total
-  ║
-  ╠══ WS2812 GND  (Central — up to 240 mA)
-  ╠══ SK9822 GND  (Central — up to 220 mA)
-  ╠══ SK9822 GND  (Who's on First)
-  ╠══ SK9822 GND  (Memory)
-  ╠══ SK9822 GND  (Maze — up to 720 mA, keep wire short & heavy)
-  ╠══ SK9822 GND  (Knob)        ← high-current returns, star direct
-  ║
-  ╚══ All display / TCA GND pins bonded to nearest Pico GND
-```
+- battery −, buck GND (in and out), AMS1117 GND
+- each Pico's GND drop (11 drops)
+- the bus-board GND anchor, on a short heavy wire (18–20 AWG), which keeps the
+  signal-ground network tied to the star
+- the high-current LED returns: WS2812 and SK9822 (central), SK9822 (Who's on
+  First, Memory, Maze, Knob)
 
-> Use **22 AWG** for logic (Pico, displays).
-> Use **20 AWG** for moderate LED strips (≤ 300 mA).
-> Use **18 AWG** for the Maze SK9822 strip and the main GND bus runs.
+Rules:
+
+1. High-current LED strip returns go **straight to the GND strip on their own
+   wire**, never through a Pico GND pin and never through the thin signal cable.
+2. Put the heaviest loads nearest the source column.
+3. Display and TCA GND pins bond to the nearest Pico GND.
+
+> Use **24 AWG** for the per-Pico power drops (4th conductor as a second GND).
+> Use **20–22 AWG** for each LED strip's VCC/GND pair.
+> Use **18 AWG** for the Maze SK9822 GND return, the feeds into the power board,
+> and the bus-board GND anchor.
+
+---
+
+### Supply Safety Checks
+
+- **Fuse:** 3–5 A in the pack positive, before the master switch.
+- **Protection board:** a TP5100 module is, as far as I know, only a charger (no
+  cell balancing, no over-discharge or short-circuit cutoff); confirm against its
+  datasheet. The pack needs a separate 2S protection board with short-circuit
+  cutoff.
+- **Buck current limit:** if the XL4016 module has a current-limit pot, set it to
+  about 3 A.
+- **AMS1117:** rated 1 A and carries the OLEDs and LED strips. Check its
+  temperature under load; a 5→3.3 V buck is a drop-in swap if it runs hot.
 
 ---
 

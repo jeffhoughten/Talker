@@ -121,48 +121,58 @@ ninja module_wires
 
 ## 5. Module Bus Wiring
 
-All eleven Picos hang off one **I2C multi-drop bus** — three signals plus
-ground, tapped in parallel at every module. There is no chain and no ordering;
-unplugging a module in the middle does not cut off the ones after it.
+All eleven Picos share one **I2C multi-drop bus**: three signals plus ground,
+tapped in parallel at every module. There is no chain and no ordering;
+unplugging a module does not cut off any other.
+
+Physically the bus is a **bus board**, a perfboard spine in the middle of the
+assembly with one 4-pin header per module (J1 = central, J2–J11 = the ten
+modules, J12 spare). Each Pico connects to its header with one 4-wire cable.
+There are no splices. The full construction details are in
+[HARDWARE_BUILD.md](HARDWARE_BUILD.md).
 
 ```
-      Central (I2C master)                                          3V3
-      ┌──────────────┐                                               │
-      │ GP2  SDA ────┼──┬────────┬────────┬────────┬─── ... ──┐    [4k7]
-      │ GP3  SCL ────┼──┼──┬─────┼──┬─────┼──┬─────┼──        │      │
-      │ GP6  ATTN ───┼──┼──┼──┬──┼──┼──┬──┼──┼──┬──┼──  ──┐   ├────[4k7]
-      │ GND ─────────┼──┼──┼──┼──┼──┼──┼──┼──┼──┼──┼──  ──┼───┼────[4k7]
-      └──────────────┘  │  │  │  │  │  │  │  │  │  │      │   │      │
-                      ┌─┴──┴──┴─┐┌─┴──┴──┴─┐┌─┴──┴─┐   ┌──┴───┴──┐  │
-                      │ Wires   ││ Keypad  ││ Simon │...│  Knob   │  │
-                      │  0x11   ││  0x12   ││ 0x13  │   │  0x1A   │  │
-                      └─────────┘└─────────┘└───────┘   └─────────┘  │
-                                                                    GND
+   Central ──┐                                     ┌── Wires
+   Keypad ───┤                                     ├── Simon Says
+   ...       ├─── 4-wire cables ──► BUS BOARD ◄────┤   ...
+             │    (≤ 30 cm each)   J1 … J12        └── Knob
+             └─ pull-ups 3.3k / 3.3k / 10k fitted once, on the bus board
 ```
 
-| Signal | GPIO | Physical Pin | Direction                                |
-|--------|------|--------------|------------------------------------------|
-| SDA    | GP2  | 4            | bidirectional (I2C1)                     |
-| SCL    | GP3  | 5            | master drives (I2C1)                     |
-| ATTN   | GP6  | 9            | modules pull LOW, central reads          |
-| GND    | —    | 38           | common return, must be shared            |
+| Signal | GPIO | Pico pin | Direction                                |
+|--------|------|----------|------------------------------------------|
+| ATTN   | GP1  | 2        | modules pull LOW, central reads          |
+| GND    | —    | 3        | common return, must be shared            |
+| SDA    | GP2  | 4        | bidirectional (I2C1)                     |
+| SCL    | GP3  | 5        | master drives (I2C1)                     |
 
-**Pull-ups: three 4.7 kΩ resistors to 3V3, fitted once at the central end only.**
-Do not add a pull-up per module — ten in parallel is 470 Ω, which overloads the
-bus drivers. The firmware enables the Pico's internal pull-ups as a bench-test
-convenience, but they are ~50 kΩ and far too weak for a real harness.
+**These four signals sit on pins 2, 3, 4 and 5, one unbroken run of pads.** A
+4-conductor cable solders on in that order with no wire crossing the board. The
+bus-board header uses the same order (pin 1 ATTN, pin 2 GND, pin 3 SDA, pin 4
+SCL) so the cable runs straight through. Pins 1–5 are at the USB end of the Pico,
+so route the cable away from the connector.
+
+ATTN is deliberately **not** on GP4/GP5 (pins 6/7). Those are each module's own
+display I2C bus, and most modules use them.
+
+**Pull-ups: 3.3 kΩ on SDA and SCL, 10 kΩ on ATTN, fitted once, on the bus
+board.** Never add a pull-up per module: ten in parallel is 470 Ω, which
+overloads the bus drivers. The firmware enables the Pico's internal pull-ups as a
+bench-test convenience, but they are about 50 kΩ and far too weak for a real
+harness. The values are a starting point; see HARDWARE_BUILD.md §2.4 for the
+capacitance reasoning and verify on a scope.
 
 **Addresses** are `0x10 + module_id`, so Wires is 0x11 through Knob at 0x1A.
 Each module's firmware sets its own address at compile time, so flash the right
-`.uf2` to the right Pico.
+`.uf2` to the right Pico. Any module can be plugged into any header.
 
 ### Why the ATTN line exists
 
 An I2C slave cannot start a transfer, so a module with a strike to report has
 no way to interrupt the central. Instead it queues the message and pulls the
 shared ATTN line low. The central sees the line drop within one loop iteration
-and sweeps the bus to collect it. ATTN is open-drain — modules only ever pull
-down, never drive high — so any number can assert it at once.
+and sweeps the bus to collect it. ATTN is open-drain: modules only ever pull
+down, never drive high, so any number can assert it at once.
 
 ATTN is an optimisation, not a requirement. If you leave it unwired the central
 falls back to polling one module every 200 ms and the game still works, just
@@ -174,11 +184,11 @@ with more latency on strikes. Wire it.
 
 | GPIO | Physical Pin | Function              | Notes                              |
 |------|--------------|-----------------------|------------------------------------|
+| GP1  | 2            | ATTN (open-drain)     | **Inter-Pico bus** — do not reuse  |
 | GP2  | 4            | I2C1 SDA              | **Inter-Pico bus** — do not reuse  |
 | GP3  | 5            | I2C1 SCL              | **Inter-Pico bus** — do not reuse  |
 | GP4  | 6            | I2C0 SDA              | This module's own displays         |
 | GP5  | 7            | I2C0 SCL              |                                    |
-| GP6  | 9            | ATTN (open-drain)     | **Inter-Pico bus** — do not reuse  |
 | GP10 | 14           | RGB LED Red           | Status indicator (common cathode)  |
 | GP11 | 15           | RGB LED Green         |                                    |
 | GP12 | 16           | RGB LED Blue          |                                    |
@@ -186,7 +196,10 @@ with more latency on strikes. Wire it.
 | GP19 | 25           | SPI0 TX               | SK9822 / addressable LED data      |
 | GP14+| 19+          | Module buttons/LEDs   | Varies by module                   |
 
-GP0, GP1, GP8 and GP9 are now **free** — they were the old daisy-chain UARTs.
+GP0, GP6, GP8 and GP9 are now **free** — GP0/GP8/GP9 were the old daisy-chain
+UARTs, and GP6 was the first choice for ATTN before it moved. (GP1 was the other
+UART0 pin and is now ATTN.) Because GP0/GP1 are the default UART debug
+pins, you give up UART debugging on these boards; the firmware uses USB serial.
 
 **Two separate I2C buses.** `i2c1` (GP2/GP3) is the inter-Pico bus and belongs
 to the game. `i2c0` (GP4/GP5) is each module's private bus for its own OLEDs,

@@ -70,7 +70,8 @@ void bus_master_init(void) {
     i2c_init(BUS_I2C, BUS_FREQ_HZ);
     gpio_set_function(BUS_SDA_PIN, GPIO_FUNC_I2C);
     gpio_set_function(BUS_SCL_PIN, GPIO_FUNC_I2C);
-    // Internal pull-ups are a weak backup only; fit 4k7 externals on the bus.
+    // Internal pull-ups are a weak backup only; the real ones (3.3k) are on
+    // the bus board.
     gpio_pull_up(BUS_SDA_PIN);
     gpio_pull_up(BUS_SCL_PIN);
 

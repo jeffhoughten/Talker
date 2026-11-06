@@ -11,7 +11,7 @@
 //
 // Hardware:
 //   GP2  / GP3  — inter-Pico I2C bus, slave 0x11 (bus_protocol.h)
-//   GP6         — shared ATTN line (bus_protocol.h)
+//   GP1         — shared ATTN line (bus_protocol.h)
 //   GP10 / GP11 / GP12 — status RGB LED (module_base.h)
 //   GP26 (ADC0) — wire sense (6 wires via resistor ladder or analog mux)
 //   3V3  (pin 36) — one end of each wire

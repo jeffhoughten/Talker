@@ -19,11 +19,17 @@ Working and on hardware:
 - Per-game randomisation of batteries, indicators, serial number, and which
   physical screen shows what
 - Level progress saved to flash
-- Inter-Pico I2C bus protocol, both master and slave sides
+
+Builds clean, **not yet run on hardware**:
+
+- Inter-Pico I2C bus protocol, both master and slave sides (compiles for all 11
+  targets; the slave interrupt handler has never executed on a real Pico)
 
 Not done yet:
 
 - Nine of the ten module firmwares are scaffolds — only Wires is written
+- Modules not active in a level receive no messages, so they sit in power-on idle
+  (white LED) rather than switching off; the central does not yet send `MSG_LOCK`
 - Win/lose LED animations
 - Level-select UI
 - The HOLD branch of the Big Button scenario randomiser
@@ -39,13 +45,18 @@ there is no chain, and pulling one module does not isolate the others.
 
 An I2C slave cannot start a transfer, so a module with something to report
 (a strike, a solve) queues the message and pulls a shared open-drain **ATTN**
-line on GP6 low. The central sees it and sweeps the bus to collect. A slow
+line on GP1 low. The central sees it and sweeps the bus to collect. A slow
 round-robin poll runs underneath as a backstop, so an unwired ATTN costs
 latency rather than silence.
 
-> Wiring gotcha: the bus pull-ups — 4.7 kΩ on SDA, SCL and ATTN — go on **once**,
-> at the central. Populating them per module puts ten in parallel and the bus
-> stops working.
+Physically the bus is a **bus board**, a perfboard spine in the middle of the
+two-sided assembly with one 4-pin header per module and no splices anywhere. The
+four wires on each header (ATTN, GND, SDA, SCL) land on Pico pins 2–5, one
+unbroken run of pads.
+
+> Wiring gotcha: the bus pull-ups — 3.3 kΩ on SDA and SCL, 10 kΩ on ATTN — go on
+> **once**, on the bus board. Populating them per module puts ten in parallel and
+> the bus stops working.
 
 The protocol lives in [`shared/bus_protocol.h`](shared/bus_protocol.h).
 
@@ -74,7 +85,8 @@ modules/<name>/           one folder per puzzle module
 
 | Document | Covers |
 |----------|--------|
-| [SETUP.md](SETUP.md) | Toolchain install, building, flashing, bus wiring |
+| [HARDWARE_BUILD.md](HARDWARE_BUILD.md) | **Physical build:** bus board, power distribution board, how a Pico connects, supply safety, bring-up checklist |
+| [SETUP.md](SETUP.md) | Toolchain install, building, flashing, bus summary |
 | [SYSTEM_DIAGRAM.md](SYSTEM_DIAGRAM.md) | Full system diagrams, per-module pinouts, panel layout, wire gauges |
 | [central_controller/WIRING.md](central_controller/WIRING.md) | Central board pinout, displays, Li-ion power system and grounding |
 | [KTANE_COMPLETE_BRIEF.md](KTANE_COMPLETE_BRIEF.md) | Original requirements. Predates the I2C switch — treat its protocol section as historical |

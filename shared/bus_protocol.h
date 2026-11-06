@@ -6,16 +6,20 @@
 // ===========================================================================
 // KTANE inter-Pico bus — I2C multi-drop
 //
-// Topology (replaces the old UART daisy chain):
+// Topology (replaces the old UART daisy chain). Physically the bus is a "bus
+// board": one 4-pin header per Pico, every Pico on a cable of 30 cm or less.
+// The pull-ups live on that board, once. See HARDWARE_BUILD.md.
 //
-//     Central (MASTER)                                       3V3
-//        i2c1                                                 |
-//     GP2 SDA  o---+-------+-------+-------+-- ... ---+      [4k7] x2
-//     GP3 SCL  o---|---+---|---+---|---+---|-- ... ---|--+     |
-//     GP6 ATTN o---|---|---|---|---|---|---|----------|--|---[4k7]
-//                  |   |   |   |   |   |   |          |  |
-//                 Mod 1   Mod 2   Mod 3        ...    Mod 10
-//                 0x11    0x12    0x13                0x1A
+//     BUS BOARD  (3.3k on SDA/SCL, 10k on ATTN, to 3V3)
+//     SDA  ====+-------+-------+-------+-- ... ---+
+//     SCL  ====|---+---|---+---|---+---|-- ... ---|--+
+//     ATTN ====|---|---|---|---|---|---|----------|--|---
+//     GND  ====|---|---|---|---|---|---|----------|--|---
+//              |   |   |   |   |   |   |          |  |
+//           Central  Mod 1  Mod 2  Mod 3   ...   Mod 10
+//           (master) 0x11   0x12   0x13          0x1A
+//
+// Each header, pin 1..4:  ATTN (Pico pin 2/GP1), GND (3), SDA (4/GP2), SCL (5/GP3)
 //
 // Every module is an I2C *slave* at address BUS_ADDR_BASE + module_id.
 // Because slaves cannot initiate a transfer, a module that has something to
@@ -98,13 +102,18 @@
 #define BUS_SDA_PIN         2    // GP2, physical pin 4
 #define BUS_SCL_PIN         3    // GP3, physical pin 5
 
-// Shared open-drain attention line. Modules pull LOW; single pull-up at the
-// central end (4k7 external — the internal ~50k is too weak for 10 drops).
-#define BUS_ATTN_PIN        6    // GP6, physical pin 9
+// Shared open-drain attention line. Modules pull LOW; one external pull-up
+// (10k) on the bus board — the internal ~50k is too weak for 10 drops. SDA and
+// SCL get 3.3k each, also on the bus board, fitted once.
+// GP1 (pin 2) sits right beside GND (pin 3), SDA (pin 4) and SCL (pin 5), so
+// all four bus wires land on one unbroken run of Pico pads. It must NOT be
+// GP4/GP5 (pins 6/7) — those are each module's own display I2C bus.
+#define BUS_ATTN_PIN        1    // GP1, physical pin 2
 
-// 100 kHz, not 400 kHz. With 11 devices on a metre of harness the bus
-// capacitance is high enough that 400 kHz gets marginal. Raise it only after
-// you have scoped the SCL edges on the real wiring.
+// 100 kHz, not 400 kHz. Total bus capacitance sums over every stub, and with
+// 11 devices it is high enough that 400 kHz gets marginal. Keep each stub to
+// 30 cm or less. Raise the speed, or change the pull-ups, only after you have
+// scoped the SCL edges on the real wiring.
 #define BUS_FREQ_HZ         100000
 
 // Any single transaction that stalls longer than this is abandoned so one

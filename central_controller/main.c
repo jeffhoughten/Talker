@@ -16,7 +16,7 @@
 // Central controller pin assignments
 //
 // The central is the I2C MASTER of the inter-Pico bus (i2c1, GP2/GP3) and
-// watches the shared ATTN line on GP6. See shared/bus_protocol.h.
+// watches the shared ATTN line on GP1. See shared/bus_protocol.h.
 // Its own displays live on a completely separate bus (i2c0, GP4/GP5).
 // ---------------------------------------------------------------------------
 #define BIG_BUTTON_PIN      20  // GP20, physical pin 26 — momentary button
@@ -706,7 +706,7 @@ int main(void) {
     // Init all displays via TCA mux
     displays_init();
 
-    // Inter-Pico bus — central is the I2C master on i2c1 (GP2/GP3) + ATTN GP6
+    // Inter-Pico bus — central is the I2C master on i2c1 (GP2/GP3) + ATTN GP1
     bus_master_init();
 
     // Load persistent save (level progress)

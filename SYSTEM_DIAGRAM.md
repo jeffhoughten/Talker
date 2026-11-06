@@ -12,13 +12,13 @@
                                              │ 7.4V
                                     ┌────────┴────────┐
                                B+   │  TP5100 / BMS   │  USB-C charging in
-                                    │  2S charger +   │◄──────────────────
-                                    │  protection     │
+                                    │  charger + 2S   │◄──────────────────
+                                    │  BMS (separate) │
                                     └────────┬────────┘
                                              │ 7.4V  BAT−
                                     ┌────────┴────────┐   ┌──────────────────┐
-                                    │  MASTER SWITCH  │   │  GND BUS         │
-                                    │  DPDT  ≥ 3A     │   │  (18 AWG copper) │
+                                    │  MASTER SWITCH  │   │  GND STRIP (star)│
+                                    │  DPDT  ≥ 3A     │   │  (power board)   │
                                     └────────┬────────┘   │  ══════════════  │
                                              │             └────────▲─────────┘
                           ┌──────────────────┤                      │ all GNDs home here
@@ -35,8 +35,8 @@
           │               │                  │                                       │
           │    ┌──────────┴───┐   ┌──────────┴──────────────────────────────────┐   │
           │    │  5V BUS      │   │  3.3V BUS                                   │   │
-          │    │  (perfboard  │   │  All OLEDs, TCA9548A chips, HT16K33,        │   │
-          │    │   or busbar) │   │  SK9822 VCC, RGB LEDs, 7-seg modules        │   │
+          │    │  (barrier    │   │  All OLEDs, TCA9548A chips, HT16K33,        │   │
+          │    │   strips)    │   │  SK9822 VCC, RGB LEDs, 7-seg modules        │   │
           │    └──────┬───────┘   └─────────────────────────────────────────────┘   │
           │           │                                                              │
           │    ┌──────┴───────────────────────────────────────────────────────┐     │
@@ -51,55 +51,58 @@
 
 ## 2. Inter-Pico I2C Bus
 
-All eleven Picos share one 4-wire bus: SDA, SCL, ATTN, GND. Every module taps
-it in parallel, so there is no ordering and no chain to break — pulling one
-module out does not isolate the ones "after" it.
+All eleven Picos share one 4-wire bus: ATTN, GND, SDA, SCL. Physically it is a
+**bus board**, a perfboard spine in the middle cavity of the assembly with one
+4-pin header per module. Every module connects to its header with a 4-wire cable
+of 30 cm or less. Nothing is spliced, there is no ordering, and pulling one
+module out does not affect any other. Construction details are in
+[HARDWARE_BUILD.md](HARDWARE_BUILD.md).
 
 ```
-                              3V3
-                               │
-                   ┌───────────┼───────────┐
-                 [4k7]       [4k7]       [4k7]      ← fit ONCE, at the central
-                   │           │           │
- ┌─────────────┐   │           │           │
- │  CENTRAL    │   │           │           │
- │ CONTROLLER  │   │           │           │
- │   Pico 1    │   │           │           │
- │  (MASTER)   │   │           │           │
- │             │   │           │           │
- │  GP2  SDA ──┼───┴───┬───────┬───────┬───────┬───────┬───────┬─── … ──┐
- │  GP3  SCL ──┼───────┼─┬─────┼─┬─────┼─┬─────┼─┬─────┼─┬───── … ──┐  │
- │  GP6  ATTN ─┼───────┼─┼─┬───┼─┼─┬───┼─┼─┬───┼─┼─┬───┼─┼───── … ─┐│  │
- │  GND ───────┼───────┼─┼─┼─┬─┼─┼─┼─┬─┼─┼─┼─┬─┼─┼─┼─┬─┼─┼───── … ┐││  │
- └─────────────┘       │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │         ││││
-                       ▼ ▼ ▼ ▼ ▼ ▼ ▼ ▼ ▼ ▼ ▼ ▼ ▼ ▼ ▼ ▼ ▼         ▼▼▼▼
- FRONT PANEL        ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐
-                    │ WIRES │ │KEYPAD │ │ SIMON │ │ WHO'S │ │MEMORY │
-                    │Pico 2 │ │Pico 3 │ │Pico 4 │ │Pico 5 │ │Pico 6 │
-                    │ 0x11  │ │ 0x12  │ │ 0x13  │ │ 0x14  │ │ 0x15  │
-                    └───────┘ └───────┘ └───────┘ └───────┘ └───────┘
-
- BACK PANEL         ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐
-                    │SWITCH │ │ MAZE  │ │PASSWD │ │VENTING│ │ KNOB  │
-                    │Pico 7 │ │Pico 8 │ │Pico 9 │ │Pico 10│ │Pico 11│
-                    │ 0x16  │ │ 0x17  │ │ 0x18  │ │ 0x19  │ │ 0x1A  │
-                    └───────┘ └───────┘ └───────┘ └───────┘ └───────┘
-
-  Every module:  GP2 → SDA bus,  GP3 → SCL bus,  GP6 → ATTN bus,  GND → GND bus
-  Slave address: 0x10 + module_id, set in firmware at compile time
+           J1       J2       J3       J4       J5       J6       ← front-face edge
+         Central   Wires   Keypad    Simon    Who's   Memory  
+            │        │        │        │        │        │    
+ATTN    ════╪════════╪════════╪════════╪════════╪════════╪══════ ATTN
+GND     ════╪════════╪════════╪════════╪════════╪════════╪══════ GND
+SDA     ════╪════════╪════════╪════════╪════════╪════════╪══════ SDA
+SCL     ════╪════════╪════════╪════════╪════════╪════════╪══════ SCL
+            │        │        │        │        │        │    
+        Switches   Maze   Password  Venting   Knob     spare  
+           J7       J8       J9       J10      J11      J12      ← back-face edge
 ```
+
+```
+                       3V3 (from the power board, column 14)
+                        │
+               ┌────────┼────────┬────────┐
+             [3.3k]   [3.3k]   [10k]       ← fitted ONCE, on the bus board
+               │        │        │
+              SDA      SCL      ATTN       GND ═ short heavy wire to the GND strip
+```
+
+Slave address is `0x10 + module_id`, set in firmware at compile time. Any module
+can go in any header.
+
+### Header pinout (4 pins, no power)
+
+| Header pin | Signal | Pico pin |
+|------------|--------|----------|
+| 1          | ATTN   | 2 (GP1)  |
+| 2          | GND    | 3        |
+| 3          | SDA    | 4 (GP2)  |
+| 4          | SCL    | 5 (GP3)  |
 
 ### The three signals
 
-| Wire | GPIO | Who drives it                     | Idle state |
-|------|------|-----------------------------------|------------|
-| SDA  | GP2  | master and slaves (open-drain)    | high       |
-| SCL  | GP3  | master only                       | high       |
-| ATTN | GP6  | slaves pull low only, never high  | high       |
+| Wire | GPIO | Who drives it                     | Idle state | Pull-up |
+|------|------|-----------------------------------|------------|---------|
+| SDA  | GP2  | master and slaves (open-drain)    | high       | 3.3 kΩ  |
+| SCL  | GP3  | master only                       | high       | 3.3 kΩ  |
+| ATTN | GP1  | slaves pull low only, never high  | high       | 10 kΩ   |
 
-**Pull-ups go on once, at the central.** Three 4.7 kΩ to 3V3. The temptation is
-to fit a pair per module because each breakout board has footprints for them —
-don't. Ten 4.7 kΩ pull-ups in parallel is 470 Ω, which the RP2040's open-drain
+**Pull-ups go on once, on the bus board.** The temptation is to fit a pair per
+module because each breakout has footprints for them. Don't: ten pull-ups in
+parallel is a fraction of the resistance of one, which the RP2040's open-drain
 output cannot pull low cleanly, and the bus stops working.
 
 ### How a module reports a strike
@@ -118,15 +121,19 @@ I2C slaves cannot initiate a transfer. The sequence is:
 
 If ATTN is left unwired the central still polls one module every 200 ms, so the
 game works with roughly a 1-2 s worst-case delay on a strike. That is the
-fallback, not the plan — wire ATTN.
+fallback, not the plan: wire ATTN.
 
-### Bus speed
+### Bus speed and length
 
-100 kHz, set by `BUS_FREQ_HZ` in `shared/bus_protocol.h`. Eleven devices spread
-over a metre of harness is a lot of bus capacitance, and 400 kHz gets marginal
-at that length. A 20-byte frame at 100 kHz takes about 2 ms, which is far
-faster than any human input the game has to catch. Raise it only after you have
-put a scope on SCL and confirmed the rising edges are square.
+100 kHz, set by `BUS_FREQ_HZ` in `shared/bus_protocol.h`. I2C is limited by total
+bus capacitance, which sums over all the wire including every stub, and 400 kHz
+gets marginal at this wiring length. The standard-mode rise-time limit of 1 µs
+allows roughly 250 pF with 4.7 kΩ pull-ups or 360 pF with 3.3 kΩ, which is why
+3.3 kΩ is the starting value. Keep each stub to 30 cm or less. A 20-byte frame at
+100 kHz takes about 2 ms, far faster than any human input the game has to catch.
+Raise the speed, or change the pull-ups, only after putting a scope on SCL with
+all 11 modules connected. The capacitance figures here are estimates, not
+measurements.
 
 ---
 
@@ -137,15 +144,15 @@ put a scope on SCL and confirmed the rising edges are square.
                     │                  CENTRAL CONTROLLER                    │
                     │                   Raspberry Pi Pico                    │
                     ├───────────┬────────────────────────────────────────────┤
-                    │           │                                            │
-  BUS SDA ──────────┤ GP2  SDA  │   ← i2c1, master. To all 10 modules + 4k7   │
-  BUS SCL ──────────┤ GP3  SCL  │   ← i2c1, master. To all 10 modules + 4k7   │
+  BUS ATTN ─────────┤ GP1  ATTN │   ← to bus board J1 (cable ≤ 30 cm)        │
+  BUS SDA ──────────┤ GP2  SDA  │   ← i2c1 master, to bus board J1           │
+  BUS SCL ──────────┤ GP3  SCL  │   ← i2c1 master, to bus board J1           │
                     │           │                                            │
   I2C0 SDA   ───────┤ GP4  SDA ─┼───┤SDA  ┌────────────────────────────────┐ │
   I2C0 SCL   ───────┤ GP5  SCL ─┼───┤SCL  │      TCA9548A  (0x70)          │ │
                     │           │   │     │  CH0 ──── HT16K33 7-seg (0x71) │ │
-  BUS ATTN ─────────┤ GP6       │   │     │  CH1 ──── SSD1306 128×64(0x3C) │ │  battery *
-   (pulled up 4k7)  │           │   │     │  CH2 ──── SSD1306 128×64(0x3C) │ │  battery *
+                    │           │   │     │  CH1 ──── SSD1306 128×64(0x3C) │ │  battery *
+                    │           │   │     │  CH2 ──── SSD1306 128×64(0x3C) │ │  battery *
                     │           │   │     │  CH3 ──── SSD1306 128×32(0x3C) │ │  serial *
   RGB LED R  ───────┤ GP10      │   │     │  CH4 ──── SSD1306 128×64(0x3C) │ │  strikes
   RGB LED G  ───────┤ GP11      │   │     │  CH5 ──── (unused)             │ │
@@ -175,7 +182,7 @@ put a scope on SCL and confirmed the rising edges are square.
   ┌────────────┬──────────────────────────────────────────────────────────┐
   │  GP2  SDA  │ ─── inter-Pico bus (i2c1, slave 0x11)                     │
   │  GP3  SCL  │ ─── inter-Pico bus                                        │
-  │  GP6  ATTN │ ─── shared attention line (pull low when reporting)       │
+  │  GP1  ATTN │ ─── shared attention line (pull low when reporting)       │
   │  GP10 R    │ RGB status LED                                            │
   │  GP11 G    │                                                           │
   │  GP12 B    │                                                           │
@@ -190,7 +197,7 @@ put a scope on SCL and confirmed the rising edges are square.
   ┌────────────┬──────────────────────────────────────────────────────────┐
   │  GP2  SDA  │ ─── inter-Pico bus (i2c1, slave 0x12)                     │
   │  GP3  SCL  │ ─── inter-Pico bus                                        │
-  │  GP6  ATTN │ ─── shared attention line (pull low when reporting)       │
+  │  GP1  ATTN │ ─── shared attention line (pull low when reporting)       │
   │  GP4  SDA  │ ─── TCA9548A ─── CH0..CH5 ─── SSD1306 128×64 × 6        │
   │  GP5  SCL  │                  (one symbol per display)                │
   │  GP10 R    │ RGB status LED                                            │
@@ -210,7 +217,7 @@ put a scope on SCL and confirmed the rising edges are square.
   ┌────────────┬──────────────────────────────────────────────────────────┐
   │  GP2  SDA  │ ─── inter-Pico bus (i2c1, slave 0x13)                     │
   │  GP3  SCL  │ ─── inter-Pico bus                                        │
-  │  GP6  ATTN │ ─── shared attention line (pull low when reporting)       │
+  │  GP1  ATTN │ ─── shared attention line (pull low when reporting)       │
   │  GP10 R    │ RGB status LED                                            │
   │  GP11 G    │                                                           │
   │  GP12 B    │                                                           │
@@ -230,7 +237,7 @@ put a scope on SCL and confirmed the rising edges are square.
   ┌────────────┬──────────────────────────────────────────────────────────┐
   │  GP2  SDA  │ ─── inter-Pico bus (i2c1, slave 0x14)                     │
   │  GP3  SCL  │ ─── inter-Pico bus                                        │
-  │  GP6  ATTN │ ─── shared attention line (pull low when reporting)       │
+  │  GP1  ATTN │ ─── shared attention line (pull low when reporting)       │
   │  GP4  SDA  │ ─── TCA9548A ─── CH0..CH5 ── SSD1306 128×64 × 6 (words)│
   │  GP5  SCL  │                  CH7       ── SSD1306 128×32   (display) │
   │  GP10 R    │ RGB status LED                                            │
@@ -252,7 +259,7 @@ put a scope on SCL and confirmed the rising edges are square.
   ┌────────────┬──────────────────────────────────────────────────────────┐
   │  GP2  SDA  │ ─── inter-Pico bus (i2c1, slave 0x15)                     │
   │  GP3  SCL  │ ─── inter-Pico bus                                        │
-  │  GP6  ATTN │ ─── shared attention line (pull low when reporting)       │
+  │  GP1  ATTN │ ─── shared attention line (pull low when reporting)       │
   │  GP10 R    │ RGB status LED                                            │
   │  GP11 G    │                                                           │
   │  GP12 B    │                                                           │
@@ -272,7 +279,7 @@ put a scope on SCL and confirmed the rising edges are square.
   ┌────────────┬──────────────────────────────────────────────────────────┐
   │  GP2  SDA  │ ─── inter-Pico bus (i2c1, slave 0x16)                     │
   │  GP3  SCL  │ ─── inter-Pico bus                                        │
-  │  GP6  ATTN │ ─── shared attention line (pull low when reporting)       │
+  │  GP1  ATTN │ ─── shared attention line (pull low when reporting)       │
   │  GP10 R    │ RGB status LED                                            │
   │  GP11 G    │                                                           │
   │  GP12 B    │                                                           │
@@ -286,7 +293,7 @@ put a scope on SCL and confirmed the rising edges are square.
   ┌────────────┬──────────────────────────────────────────────────────────┐
   │  GP2  SDA  │ ─── inter-Pico bus (i2c1, slave 0x17)                     │
   │  GP3  SCL  │ ─── inter-Pico bus                                        │
-  │  GP6  ATTN │ ─── shared attention line (pull low when reporting)       │
+  │  GP1  ATTN │ ─── shared attention line (pull low when reporting)       │
   │  GP10 R    │ RGB status LED                                            │
   │  GP11 G    │                                                           │
   │  GP12 B    │                                                           │
@@ -304,7 +311,7 @@ put a scope on SCL and confirmed the rising edges are square.
   ┌────────────┬──────────────────────────────────────────────────────────┐
   │  GP2  SDA  │ ─── inter-Pico bus (i2c1, slave 0x18)                     │
   │  GP3  SCL  │ ─── inter-Pico bus                                        │
-  │  GP6  ATTN │ ─── shared attention line (pull low when reporting)       │
+  │  GP1  ATTN │ ─── shared attention line (pull low when reporting)       │
   │  GP4  SDA  │ ─── TCA9548A ─── CH0..CH4 ── SSD1306 128×32 × 5 (chars)│
   │  GP5  SCL  │                                                           │
   │  GP10 R    │ RGB status LED                                            │
@@ -324,7 +331,7 @@ put a scope on SCL and confirmed the rising edges are square.
   ┌────────────┬──────────────────────────────────────────────────────────┐
   │  GP2  SDA  │ ─── inter-Pico bus (i2c1, slave 0x19)                     │
   │  GP3  SCL  │ ─── inter-Pico bus                                        │
-  │  GP6  ATTN │ ─── shared attention line (pull low when reporting)       │
+  │  GP1  ATTN │ ─── shared attention line (pull low when reporting)       │
   │  GP4  SDA  │ ─── SSD1306 128×32 (question display — direct I2C)       │
   │  GP5  SCL  │                                                           │
   │  GP14      │ YES button                                                │
@@ -338,7 +345,7 @@ put a scope on SCL and confirmed the rising edges are square.
   ┌────────────┬──────────────────────────────────────────────────────────┐
   │  GP2  SDA  │ ─── inter-Pico bus (i2c1, slave 0x1A)                     │
   │  GP3  SCL  │ ─── inter-Pico bus                                        │
-  │  GP6  ATTN │ ─── shared attention line (pull low when reporting)       │
+  │  GP1  ATTN │ ─── shared attention line (pull low when reporting)       │
   │  GP10 R    │ RGB status LED  (if fitted)                               │
   │  GP11 G    │                                                           │
   │  GP12 B    │                                                           │
@@ -406,18 +413,26 @@ put a scope on SCL and confirmed the rising edges are square.
   ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
+The front and back panels are one two-sided assembly; the power board and bus
+board sit in the shared middle cavity. The key lock is **purely mechanical**: it
+opens the back panel and is not wired to any switch. The back-panel Picos stay
+powered at all times and are disabled in software by the level's active-module
+mask. Never switch power to a Pico that is on the bus (see HARDWARE_BUILD.md §6).
+
 ---
 
 ## 6. Wire Gauge Guide
 
 | Connection | Gauge | Reason |
 |---|---|---|
-| Battery → switch → buck converter | 18 AWG | Up to 3 A load |
-| 5V bus backbone | 18 AWG | Full system load |
-| 3.3V bus backbone | 20 AWG | Logic only, < 500 mA |
-| Per-Pico 5V drop from bus | 22 AWG | < 100 mA per Pico |
-| Maze SK9822 GND return | 18 AWG | Up to 720 mA peak |
-| Other SK9822/WS2812 GND | 20 AWG | < 300 mA |
-| Bus signal wires (SDA/SCL/ATTN) | 24–26 AWG | Signal only; keep the run under ~1 m |
+| Battery → fuse → switch → buck converter | 18 AWG | Up to 3 A load |
+| Buck / LDO → power board (5V, 3V3, GND feeds) | 18 AWG | Full system load, short run |
+| Per-Pico power drop (5V, 3V3, GND) | 24 AWG | Typically under 150 mA per Pico; use the 4th conductor as a second GND |
+| Maze SK9822 GND return | 18 AWG | Up to 720 mA peak, straight to the GND strip |
+| Other SK9822/WS2812 feeds (VCC and GND) | 20–22 AWG | Under 300 mA, own wire pair, not the shared drop |
+| Bus-board GND anchor to the star | 18–20 AWG | Short and heavy |
+| Bus signal cable (ATTN/GND/SDA/SCL), per module | 24 AWG | Signal only; 30 cm or less |
 | I2C within a module | 24–26 AWG | Signal only |
-| GND bus spine | 16–14 AWG | All returns, keep short |
+
+Every Pico has two cables: a 4-wire signal cable to the bus board and a 3-wire
+power drop to the power board. See [HARDWARE_BUILD.md](HARDWARE_BUILD.md).
